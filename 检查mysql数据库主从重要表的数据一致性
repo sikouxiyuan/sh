@@ -1,0 +1,68 @@
+检查mysql数据库主从重要表的数据一致性
+
+mysql数据库主从做起来不难，但是主从数据的一致性很重要，本脚本用于粗略检查mysql数据库主从重要表的数据一致性，主要是在主从正常的情况下，连接数据库统计表的条数是否一致，脚本分为两部分，一个是py脚本，一个是ini配置文件，py脚本源码如下：
+
+#!/usr/bin/env python 
+#This script is used check mysql replcation some table 
+# -*- coding: utf-8 -*- 
+import sys,time,MySQLdb,threading 
+import ConfigParser 
+class Check: 
+    def __init__(self): 
+        self.w =[] 
+        self.table = table 
+    def conf(self): 
+        fp = ConfigParser.ConfigParser() 
+        fp.readfp(open('config.ini')) 
+        iplist = fp.get("global", "iplist") 
+        return iplist 
+            
+    def wd(self,table): 
+        iplist = self.conf() 
+        hostlist = [] 
+        self.w = [] 
+        threads = [] 
+        for i in iplist.split(";"): 
+            hostlist.append(i.split(",")) 
+        for i in range(len(hostlist)): 
+            host = hostlist[i][0] 
+            hostname = hostlist[i][1] 
+            t = threading.Thread(target=self.mysql_check,args=(host,hostname,i)) 
+            threads.append(t) 
+            t.start() 
+            time.sleep(0.05) 
+        for i in range(len(hostlist)): 
+            threads[i].join() 
+        self.w.sort() 
+        for r in range(len(self.w)): 
+            print self.w[r] 
+            
+    def mysql_check(self,host,hostname,i): 
+        try: 
+            conn = MySQLdb.connect(host = host,user = 'user',passwd = 'passwd',connect_timeout=5) 
+            cursor = conn.cursor()  
+            sql = "SELECT COUNT(*) FROM %s" % self.table 
+            cursor.execute(sql) 
+            alldata = cursor.fetchall() 
+            count = alldata[0][0] 
+            value = hostname + "\t" + str(count) 
+            self.w.append(value) 
+        except: 
+            print "Can not Connect to " + host + " mysql server"
+            return 0
+            
+if __name__ == "__main__":  
+    table_list = ['aa.aa','bb.bb','cc.cc'] 
+    for i in range(len(table_list)): 
+        table = table_list[i] 
+        print "Table Count:  " + table 
+        print
+        boss = Check() 
+        boss.wd(table) 
+        print
+
+
+config.ini文件格式如下：
+
+[global] 
+iplist = 192.168.50.1,vvv（主）;192.168.50.2,vvv（从）;192.168.50.3,ttt（主）;192.168.50.4,ttt(从)
